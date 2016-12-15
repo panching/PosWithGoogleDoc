@@ -1,0 +1,6 @@
+framework module Pods_PosPCTests {
+  umbrella header "Pods-PosPCTests-umbrella.h"
+
+  export *
+  module * { export * }
+}
