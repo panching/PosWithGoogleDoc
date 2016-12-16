@@ -15,6 +15,8 @@ class Product{
     var itemName = ""
     var itemMoney = 0
     
+    init() {}
+    
     init(image:UIImage,name:String,money:Int) {
         itemImage = image
         itemName = name

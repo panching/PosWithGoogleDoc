@@ -12,24 +12,20 @@ private let googleDoc = "https://spreadsheets.google.com/feeds/cells/1Su_W_SQU1U
 
 private let reuseIdentifier = "Cell"
 class ViewController: UIViewController ,UICollectionViewDataSource,UICollectionViewDelegate,UITableViewDelegate,UITableViewDataSource{
+    @IBOutlet weak var loadingIndicatorView: UIActivityIndicatorView!
     @IBOutlet weak var totalLabel: UILabel!
     @IBOutlet weak var itemTableView: UITableView!
     @IBOutlet weak var itemCollectionView: UICollectionView!
-
+    
+    var googleDocProduct = [Product]()
     var chooseArray = [Product]()
     var products = [Product]()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
-
-        //create products
-        for i in 0...10 {
-            let item = Product(name:"飲料 \(i) 號", money: i)
-            products.append(item)
-        }
-        
-        self.postRequest()
+        // set Defult Products
+        self.setDefultItem()
     }
 
     override func didReceiveMemoryWarning() {
@@ -37,26 +33,114 @@ class ViewController: UIViewController ,UICollectionViewDataSource,UICollectionV
         // Dispose of any resources that can be recreated.
     }
     
+    @IBAction func getDefultItem(_ sender: Any) {
+        self.setDefultItem()
+    }
+    
+    @IBAction func getGoogleDocItem(_ sender: Any) {
+        self.loadingIndicatorView.startAnimating()
+        self.postRequest()
+    }
+    
+    @IBAction func doClear(_ sender: Any) {
+        chooseArray = [Product]()
+        totalLabel.text = "$ 0 元"
+        self.itemTableView.reloadData()
+    }
+    
+    func setDefultItem() -> Void {
+        googleDocProduct = [Product]()
+        products = [Product]()
+        //create defult products
+        for i in 0...10 {
+            let item = Product(name:"飲料 \(i+1) 號", money: (i+1)*10)
+            products.append(item)
+        }
+        self.itemCollectionView.reloadData()
+    }
+    
     //postRequest get googleDoc Excel
     func postRequest() -> Void {
         
-        //Use AFNetworking post googleURL get jsonData
-        let afn = AFHTTPSessionManager()
-        afn.get(googleDoc, parameters: nil, success: { (oper, data) -> Void in
-            print(data)
-        }) { (opeation, error) -> Void in
-            print(error)
+        guard googleDocProduct.count == 0 else {
+            googleDocProduct = [Product]()
+            self.loadingIndicatorView.stopAnimating()
+            return
         }
+        //Use AFNetworking post googleURL get jsonData
+        let manager = AFHTTPSessionManager()
+        do {
+            var counter = 0
+            //googleDoc value array
+            var itemNameArray = [String]()
+            var itemMoneyArray = [String]()
+            
+            manager.get(googleDoc, parameters: nil, success: { (oper, data) -> Void in
+                let jsonDict = data as? Dictionary<String, Any>
+                let feedDict = jsonDict?["feed"] as? Dictionary<String, Any>
+                guard let entryArray = feedDict?["entry"] as? Array<Any> else{
+                    return
+                }
+                // json parser google cell
+                //ex. 
+                //"content":{"type":"text","$t":"drink"} << cellInfo
+                //"content":{"type":"text","$t":"$20"} << cellInfo
+                for temp in entryArray {
+                    guard let tempDict = temp as? Dictionary <String, Any> else{
+                        return
+                    }
+                    let content = tempDict["content"] as? Dictionary <String, Any>
+                    guard let cellInfo = content?["$t"] as? String else{
+                        return
+                    }
+                    
+                    if (counter % 2) == 0{
+                        itemNameArray.append(cellInfo)
+                    }else{
+                        itemMoneyArray.append(cellInfo)
+                    }
+                    counter += 1
+                }
+             
+                //create googleDoc Products
+                for i in 0..<itemNameArray.count{
+                    let item = Product()
+                    item.itemName = itemNameArray[i]
+                    item.itemMoney = Int(itemMoneyArray[i])!
+                    self.googleDocProduct.append(item)
+                }
+                
+                self.itemCollectionView.reloadData()
+                self.loadingIndicatorView.stopAnimating()
+            }) { (opeation, error) -> Void in
+                self.loadingIndicatorView.stopAnimating()
+                print(error)
+            }
+        } catch {
+            self.loadingIndicatorView.stopAnimating()
+            print("Error ! \(error)")
+        }
+
     }
     
     //MARK: - collectionView Method
     public func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int{
-        return products.count
+        if(googleDocProduct.count>0){
+            return googleDocProduct.count
+        }else{
+            return products.count
+        }
     }
+    
     public func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell{
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuseIdentifier, for: indexPath) as! ItemCollectionViewCell
-        
-        let item = products[indexPath.row]
+        let tempArray:Array<Any>
+        if(googleDocProduct.count>0){
+            tempArray = googleDocProduct
+        }else{
+            tempArray = products
+        }
+        let item = tempArray[indexPath.row] as! Product
         cell.itemImage.image = item.itemImage
         cell.itemName.text = item.itemName
         cell.itemMoney.text = "$\(item.itemMoney)"
@@ -64,7 +148,13 @@ class ViewController: UIViewController ,UICollectionViewDataSource,UICollectionV
     }
 
     public func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath){
-        chooseArray.append(products[indexPath.row])
+        let tempArray:Array<Any>
+        if(googleDocProduct.count>0){
+            tempArray = googleDocProduct
+        }else{
+            tempArray = products
+        }
+        chooseArray.append(tempArray[indexPath.row] as! Product)
         var total = 0
         for item in chooseArray {
             total += item.itemMoney
@@ -85,7 +175,7 @@ class ViewController: UIViewController ,UICollectionViewDataSource,UICollectionV
         cell.itemImage.image = item.itemImage
         cell.itemName.text = item.itemName
         cell.itemType.text = ""
-        cell.itemAmount.text = "1"
+        cell.itemAmount.text = "$ \(String(item.itemMoney))"
         return cell
     }
 
